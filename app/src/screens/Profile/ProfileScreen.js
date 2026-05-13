@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal as RNModal } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal as RNModal, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/theme';
@@ -9,6 +9,10 @@ import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 
+const MONTH_NAMES = ['Jan', 'Fév', 'Mars', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: CURRENT_YEAR - 1939 }, (_, i) => CURRENT_YEAR - i);
+
 export default function ProfileScreen({ navigation }) {
     const [profile, setProfile] = useState({
         first_name: '', last_name: '', weight: '', height: '', birth_date: '', gender: '',
@@ -16,7 +20,10 @@ export default function ProfileScreen({ navigation }) {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [pickerMonth, setPickerMonth] = useState(new Date().getMonth() + 1);
+    const [pickerYear, setPickerYear] = useState(CURRENT_YEAR);
     const signOut = useAuthStore(s => s.signOut);
+    const yearListRef = useRef(null);
 
     useEffect(() => { loadProfile(); }, []);
 
@@ -76,11 +83,26 @@ export default function ProfileScreen({ navigation }) {
         setShowDatePicker(false);
     };
 
+    const openDatePicker = () => {
+        // Initialize picker month/year from existing birth_date or defaults
+        if (profile.birth_date) {
+            const d = new Date(profile.birth_date);
+            setPickerMonth(d.getMonth() + 1);
+            setPickerYear(d.getFullYear());
+        } else {
+            setPickerMonth(1);
+            setPickerYear(2000);
+        }
+        setShowDatePicker(true);
+    };
+
     const formatDisplayDate = (dateStr) => {
         if (!dateStr) return '';
         const d = new Date(dateStr);
         return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
     };
+
+    const calendarInitialDate = `${pickerYear}-${String(pickerMonth).padStart(2, '0')}-01`;
 
     const genders = [
         { key: 'male', label: '♂️ Homme' },
@@ -98,7 +120,7 @@ export default function ProfileScreen({ navigation }) {
 
                 {/* Date picker trigger */}
                 <Text style={styles.label}>Date de naissance</Text>
-                <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateTrigger}>
+                <TouchableOpacity onPress={openDatePicker} style={styles.dateTrigger}>
                     <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
                     <Text style={[styles.dateText, !profile.birth_date && styles.datePlaceholder]}>
                         {profile.birth_date ? formatDisplayDate(profile.birth_date) : 'Sélectionner une date'}
@@ -133,7 +155,7 @@ export default function ProfileScreen({ navigation }) {
             <Button title="Sauvegarder le profil" onPress={handleSave} loading={saving} style={{ marginBottom: SPACING.lg }} />
             <Button title="Se déconnecter" variant="danger" onPress={handleSignOut} style={{ marginTop: SPACING.xxl }} />
 
-            {/* Date picker modal */}
+            {/* Date picker modal with month/year selectors */}
             <RNModal visible={showDatePicker} animationType="slide" transparent>
                 <View style={styles.dateModalOverlay}>
                     <View style={styles.dateModalContent}>
@@ -143,8 +165,43 @@ export default function ProfileScreen({ navigation }) {
                                 <Ionicons name="close" size={24} color={COLORS.text} />
                             </TouchableOpacity>
                         </View>
+
+                        {/* Year selector */}
+                        <Text style={styles.pickerLabel}>Année</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerRow} contentContainerStyle={styles.pickerRowContent}>
+                            {YEARS.map(y => (
+                                <TouchableOpacity
+                                    key={y}
+                                    onPress={() => setPickerYear(y)}
+                                    style={[styles.pickerChip, pickerYear === y && styles.pickerChipActive]}
+                                >
+                                    <Text style={[styles.pickerChipText, pickerYear === y && styles.pickerChipTextActive]}>{y}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        {/* Month selector */}
+                        <Text style={styles.pickerLabel}>Mois</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerRow} contentContainerStyle={styles.pickerRowContent}>
+                            {MONTH_NAMES.map((m, i) => (
+                                <TouchableOpacity
+                                    key={i}
+                                    onPress={() => setPickerMonth(i + 1)}
+                                    style={[styles.pickerChip, pickerMonth === i + 1 && styles.pickerChipActive]}
+                                >
+                                    <Text style={[styles.pickerChipText, pickerMonth === i + 1 && styles.pickerChipTextActive]}>{m}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
                         <Calendar
+                            key={calendarInitialDate}
+                            initialDate={calendarInitialDate}
                             onDayPress={handleDateSelect}
+                            onMonthChange={(month) => {
+                                setPickerMonth(month.month);
+                                setPickerYear(month.year);
+                            }}
                             markedDates={profile.birth_date ? {
                                 [profile.birth_date]: { selected: true, selectedColor: COLORS.primary }
                             } : {}}
@@ -196,11 +253,22 @@ const styles = StyleSheet.create({
     dateModalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
     dateModalContent: {
         backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,
-        padding: SPACING.xl, paddingBottom: 40,
+        padding: SPACING.xl, paddingBottom: 40, maxHeight: '90%',
     },
     dateModalHeader: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: SPACING.lg,
+        marginBottom: SPACING.md,
     },
     dateModalTitle: { color: COLORS.text, fontSize: FONTS.sizes.lg, fontWeight: '700' },
+    pickerLabel: { color: COLORS.textSecondary, fontSize: FONTS.sizes.xs, fontWeight: '600', marginBottom: 4, marginTop: SPACING.sm },
+    pickerRow: { maxHeight: 38, marginBottom: SPACING.sm },
+    pickerRowContent: { gap: 6, alignItems: 'center' },
+    pickerChip: {
+        paddingVertical: 6, paddingHorizontal: 14,
+        borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceLight,
+        borderWidth: 1, borderColor: COLORS.border,
+    },
+    pickerChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+    pickerChipText: { color: COLORS.textMuted, fontSize: FONTS.sizes.sm, fontWeight: '500' },
+    pickerChipTextActive: { color: COLORS.white, fontWeight: '700' },
 });

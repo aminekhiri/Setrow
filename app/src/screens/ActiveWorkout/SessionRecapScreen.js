@@ -38,11 +38,6 @@ export default function SessionRecapScreen({ route, navigation }) {
                     <Text style={styles.summaryValue}>{recap.totalSets}</Text>
                     <Text style={styles.summaryLabel}>Séries</Text>
                 </View>
-                <View style={styles.divider} />
-                <View style={styles.summaryItem}>
-                    <Text style={styles.summaryValue}>{Math.round(recap.totalVolume)}</Text>
-                    <Text style={styles.summaryLabel}>kg total</Text>
-                </View>
             </View>
 
             {/* Exercise-by-exercise breakdown */}

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, Modal as RNModal } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,13 +8,25 @@ import { api } from '../../api/client';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import WeightChart from '../../components/charts/WeightChart';
+import { useRef } from 'react';
 
 export default function GoalsScreen({ navigation }) {
-    const [activeTab, setActiveTab] = useState('calendar'); // 'calendar' | 'goals' | 'stats'
+    const [activeTab, setActiveTab] = useState('calendar'); // 'calendar' | 'exercises' | 'weight'
+    const [goalFilter, setGoalFilter] = useState('all'); // 'all' | 'achieved' | 'pending'
+    const [goalSort, setGoalSort] = useState('closest'); // 'closest' | 'default'
     const [goals, setGoals] = useState([]);
     const [markedDates, setMarkedDates] = useState({});
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [calendarMonth, setCalendarMonth] = useState(() => {
+        const now = new Date();
+        return { month: now.getMonth() + 1, year: now.getFullYear() };
+    });
+
+    // Weight tab state
+    const [weightData, setWeightData] = useState([]);
+    const [weightPeriod, setWeightPeriod] = useState('month');
 
     // Goal creation state
     const [showGoalModal, setShowGoalModal] = useState(false);
@@ -39,7 +51,7 @@ export default function GoalsScreen({ navigation }) {
         try {
             const [goalsData, sessionsData] = await Promise.all([
                 api.getGoals().catch(() => []),
-                api.getSessions({ limit: 30 }).catch(() => []),
+                api.getSessions({ limit: 100 }).catch(() => []),
             ]);
             setGoals(goalsData);
             setSessions(sessionsData);
@@ -52,15 +64,28 @@ export default function GoalsScreen({ navigation }) {
                     marks[dateKey] = {
                         marked: true,
                         dotColor: COLORS.primary,
-                        selectedColor: COLORS.primary,
+                        selected: true,
+                        selectedColor: COLORS.primaryGlow,
+                        selectedTextColor: COLORS.primary,
                     };
                 }
             });
             setMarkedDates(marks);
+
+            // Load weight data
+            loadWeightHistory('month');
         } catch (err) {
             console.error('Load error:', err);
         }
         setLoading(false);
+    };
+
+    const loadWeightHistory = async (period) => {
+        try {
+            const data = await api.getWeightHistory(period);
+            setWeightData(data);
+            setWeightPeriod(period);
+        } catch (err) { console.error(err); }
     };
 
     const openGoalModal = async () => {
@@ -114,17 +139,25 @@ export default function GoalsScreen({ navigation }) {
         e.name.toLowerCase().includes(exerciseSearch.toLowerCase())
     );
 
+    // Compute total and monthly session counts
+    const totalSessions = Object.keys(markedDates).length;
+    const monthlySessions = Object.keys(markedDates).filter(dateKey => {
+        const [y, m] = dateKey.split('-');
+        return parseInt(y) === calendarMonth.year && parseInt(m) === calendarMonth.month;
+    }).length;
+
     if (loading) {
         return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator color={COLORS.primary} size="large" /></View>;
     }
 
     return (
         <View style={styles.container}>
-            {/* Tabs: Calendar / Goals / Stats */}
+            {/* Tabs: Calendar / Exercises / Weight */}
             <View style={styles.tabBar}>
                 {[
                     { key: 'calendar', label: 'Calendrier', icon: 'calendar' },
-                    { key: 'goals', label: 'Objectifs', icon: 'trophy' },
+                    { key: 'exercises', label: 'Exercices', icon: 'trophy' },
+                    { key: 'weight', label: 'Poids', icon: 'scale-outline' },
                 ].map(tab => (
                     <TouchableOpacity
                         key={tab.key}
@@ -143,6 +176,9 @@ export default function GoalsScreen({ navigation }) {
                         <Calendar
                             markedDates={markedDates}
                             onDayPress={handleDayPress}
+                            onMonthChange={(month) => {
+                                setCalendarMonth({ month: month.month, year: month.year });
+                            }}
                             theme={{
                                 backgroundColor: COLORS.background,
                                 calendarBackground: COLORS.background,
@@ -160,11 +196,11 @@ export default function GoalsScreen({ navigation }) {
 
                         <View style={styles.statsStrip}>
                             <View style={styles.statItem}>
-                                <Text style={styles.statValue}>{Object.keys(markedDates).length}</Text>
-                                <Text style={styles.statLabel}>Séances</Text>
+                                <Text style={styles.statValue}>{totalSessions}</Text>
+                                <Text style={styles.statLabel}>Séances au total</Text>
                             </View>
                             <View style={styles.statItem}>
-                                <Text style={styles.statValue}>{sessions.length > 0 ? sessions.length : 0}</Text>
+                                <Text style={styles.statValue}>{monthlySessions}</Text>
                                 <Text style={styles.statLabel}>Ce mois</Text>
                             </View>
                         </View>
@@ -195,48 +231,115 @@ export default function GoalsScreen({ navigation }) {
                     </>
                 )}
 
-                {activeTab === 'goals' && (
-                    <>
-                        <Button title="➕ Nouvel objectif" onPress={openGoalModal} style={{ marginBottom: SPACING.lg }} />
+                {activeTab === 'exercises' && (() => {
+                    // Filter goals
+                    let displayGoals = goals;
+                    if (goalFilter === 'achieved') displayGoals = goals.filter(g => (g.progress_1rm || 0) >= 100);
+                    else if (goalFilter === 'pending') displayGoals = goals.filter(g => (g.progress_1rm || 0) < 100);
 
-                        {goals.length === 0 ? (
-                            <View style={styles.emptyGoals}>
-                                <Ionicons name="trophy-outline" size={48} color={COLORS.textMuted} />
-                                <Text style={styles.emptyText}>Aucun objectif défini</Text>
-                                <Text style={styles.emptySubtext}>Définis des objectifs pour suivre ta progression</Text>
+                    // Sort: closest to target first (highest progress first among non-achieved)
+                    if (goalSort === 'closest') {
+                        displayGoals = [...displayGoals].sort((a, b) => {
+                            const pa = a.progress_1rm || 0;
+                            const pb = b.progress_1rm || 0;
+                            // Achieved goals go last, then sort by descending progress
+                            if (pa >= 100 && pb < 100) return 1;
+                            if (pb >= 100 && pa < 100) return -1;
+                            return pb - pa;
+                        });
+                    }
+
+                    return (
+                        <>
+                            <Button title="➕ Nouvel objectif" onPress={openGoalModal} style={{ marginBottom: SPACING.md }} />
+
+                            {/* Filter chips */}
+                            <View style={styles.filterRow}>
+                                {[
+                                    { key: 'all', label: 'Tout' },
+                                    { key: 'pending', label: 'En cours' },
+                                    { key: 'achieved', label: 'Atteints' },
+                                ].map(f => (
+                                    <TouchableOpacity
+                                        key={f.key}
+                                        onPress={() => setGoalFilter(f.key)}
+                                        style={[styles.filterChip, goalFilter === f.key && styles.filterChipActive]}
+                                    >
+                                        <Text style={[styles.filterChipText, goalFilter === f.key && styles.filterChipTextActive]}>{f.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                                <TouchableOpacity
+                                    onPress={() => setGoalSort(s => s === 'closest' ? 'default' : 'closest')}
+                                    style={[styles.filterChip, goalSort === 'closest' && styles.filterChipActive]}
+                                >
+                                    <Ionicons name="swap-vertical" size={14} color={goalSort === 'closest' ? COLORS.primary : COLORS.textMuted} />
+                                    <Text style={[styles.filterChipText, goalSort === 'closest' && styles.filterChipTextActive]}>
+                                        {goalSort === 'closest' ? 'Plus proche' : 'Défaut'}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
-                        ) : goals.map(g => {
-                            const progress = g.current_value && g.target_weight > 0
-                                ? Math.min(100, Math.round((g.current_value / g.target_weight) * 100))
-                                : 0;
-                            const isAchieved = progress >= 100;
 
-                            return (
-                                <Card key={g.id} style={styles.goalCard}>
-                                    <View style={styles.goalHeader}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.goalName}>{g.exercises?.name || 'Exercice'}</Text>
-                                            <Badge label={g.exercises?.muscle_group} />
+                            {displayGoals.length === 0 ? (
+                                <View style={styles.emptyGoals}>
+                                    <Ionicons name="trophy-outline" size={48} color={COLORS.textMuted} />
+                                    <Text style={styles.emptyText}>{goals.length === 0 ? 'Aucun objectif défini' : 'Aucun objectif dans ce filtre'}</Text>
+                                    <Text style={styles.emptySubtext}>{goals.length === 0 ? 'Définis des objectifs pour suivre ta progression' : 'Change le filtre pour voir tes objectifs'}</Text>
+                                </View>
+                            ) : displayGoals.map(g => {
+                                const progress = g.progress_1rm || 0;
+                                const isAchieved = progress >= 100;
+
+                                return (
+                                    <Card key={g.id} style={styles.goalCard}>
+                                        <View style={styles.goalHeader}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.goalName}>{g.exercises?.name || 'Exercice'}</Text>
+                                                <Badge label={g.exercises?.muscle_group} />
+                                            </View>
+                                            <TouchableOpacity onPress={() => handleDeleteGoal(g.id)}>
+                                                <Ionicons name="trash-outline" size={16} color={COLORS.textMuted} />
+                                            </TouchableOpacity>
                                         </View>
-                                        <TouchableOpacity onPress={() => handleDeleteGoal(g.id)}>
-                                            <Ionicons name="trash-outline" size={16} color={COLORS.textMuted} />
-                                        </TouchableOpacity>
-                                    </View>
 
-                                    <View style={styles.goalTarget}>
-                                        <Text style={styles.goalTargetText}>
-                                            🎯 {g.target_weight > 0 ? `${g.target_weight} kg` : ''}{g.target_weight > 0 && g.target_reps > 0 ? ' × ' : ''}{g.target_reps > 0 ? `${g.target_reps} reps` : ''}
-                                        </Text>
-                                        {isAchieved && <Text style={styles.achieved}>✅ Atteint !</Text>}
-                                    </View>
+                                        <View style={styles.goalTarget}>
+                                            <Text style={styles.goalTargetText}>
+                                                🎯 {g.target_weight > 0 ? `${g.target_weight} kg` : ''}{g.target_weight > 0 && g.target_reps > 0 ? ' × ' : ''}{g.target_reps > 0 ? `${g.target_reps} reps` : ''}
+                                            </Text>
+                                            {isAchieved && <Text style={styles.achieved}>✅ Atteint !</Text>}
+                                        </View>
 
-                                    <View style={styles.progressBarBg}>
-                                        <View style={[styles.progressBarFg, { width: `${progress}%`, backgroundColor: isAchieved ? COLORS.success : COLORS.primary }]} />
-                                    </View>
-                                    <Text style={styles.progressText}>{progress}%</Text>
-                                </Card>
-                            );
-                        })}
+                                        {g.current_1rm > 0 && (
+                                            <Text style={styles.currentPerf}>
+                                                💪 Meilleur 1RM estimé : {Math.round(g.current_1rm)} kg
+                                            </Text>
+                                        )}
+
+                                        <View style={styles.progressBarBg}>
+                                            <View style={[styles.progressBarFg, { width: `${Math.min(100, progress)}%`, backgroundColor: isAchieved ? COLORS.success : COLORS.primary }]} />
+                                        </View>
+                                        <Text style={styles.progressText}>{progress}%</Text>
+                                    </Card>
+                                );
+                            })}
+                        </>
+                    );
+                })()}
+
+                {activeTab === 'weight' && (
+                    <>
+                        <Text style={styles.sectionTitle}>Évolution du poids corporel</Text>
+                        <WeightChart
+                            data={weightData}
+                            selectedPeriod={weightPeriod}
+                            onPeriodChange={loadWeightHistory}
+                        />
+                        {weightData.length === 0 && (
+                            <View style={styles.emptyGoals}>
+                                <Ionicons name="scale-outline" size={48} color={COLORS.textMuted} />
+                                <Text style={styles.emptyText}>Aucune donnée de poids</Text>
+                                <Text style={styles.emptySubtext}>Enregistre ton poids dans ton profil pour voir ta progression</Text>
+                            </View>
+                        )}
                     </>
                 )}
             </ScrollView>
@@ -255,12 +358,12 @@ export default function GoalsScreen({ navigation }) {
                         {/* Exercise search */}
                         <Text style={styles.fieldLabel}>Exercice</Text>
                         <TextInput
-                            style={styles.input}
+                            style={styles.inputLarge}
                             placeholder="Rechercher un exercice..."
                             placeholderTextColor={COLORS.textMuted}
                             value={exerciseSearch}
                             onChangeText={setExerciseSearch}
-                            autoFocus={false}
+                            autoFocus={true}
                         />
 
                         {exerciseSearch.length > 0 && (
@@ -355,13 +458,14 @@ const styles = StyleSheet.create({
     sessionDate: { color: COLORS.textMuted, fontSize: FONTS.sizes.sm, marginTop: 2 },
     emptyGoals: { alignItems: 'center', paddingVertical: SPACING.xxl, gap: SPACING.sm },
     emptyText: { color: COLORS.textSecondary, fontSize: FONTS.sizes.md, fontWeight: '600' },
-    emptySubtext: { color: COLORS.textMuted, fontSize: FONTS.sizes.sm },
+    emptySubtext: { color: COLORS.textMuted, fontSize: FONTS.sizes.sm, textAlign: 'center' },
     goalCard: { marginBottom: SPACING.md },
     goalHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.sm },
     goalName: { color: COLORS.text, fontSize: FONTS.sizes.md, fontWeight: '600', marginBottom: 4 },
-    goalTarget: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+    goalTarget: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.xs },
     goalTargetText: { color: COLORS.textSecondary, fontSize: FONTS.sizes.sm },
     achieved: { color: COLORS.success, fontSize: FONTS.sizes.sm, fontWeight: '600' },
+    currentPerf: { color: COLORS.textMuted, fontSize: FONTS.sizes.xs, marginBottom: SPACING.sm },
     progressBarBg: { height: 8, backgroundColor: COLORS.surfaceLight, borderRadius: 4, overflow: 'hidden' },
     progressBarFg: { height: '100%', borderRadius: 4 },
     progressText: { color: COLORS.textMuted, fontSize: FONTS.sizes.xs, marginTop: 4, textAlign: 'right' },
@@ -378,6 +482,22 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.surfaceLight, borderRadius: RADIUS.md, padding: SPACING.md,
         color: COLORS.text, fontSize: FONTS.sizes.md, borderWidth: 1, borderColor: COLORS.border,
     },
+    inputLarge: {
+        backgroundColor: COLORS.surfaceLight, borderRadius: RADIUS.md, padding: SPACING.lg,
+        color: COLORS.text, fontSize: FONTS.sizes.lg, borderWidth: 1, borderColor: COLORS.border,
+    },
+    filterRow: {
+        flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg, flexWrap: 'wrap',
+    },
+    filterChip: {
+        flexDirection: 'row', alignItems: 'center', gap: 4,
+        paddingVertical: SPACING.xs, paddingHorizontal: SPACING.md,
+        borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceLight,
+        borderWidth: 1, borderColor: COLORS.border,
+    },
+    filterChipActive: { backgroundColor: COLORS.primaryGlow, borderColor: COLORS.primary },
+    filterChipText: { color: COLORS.textMuted, fontSize: FONTS.sizes.xs, fontWeight: '500' },
+    filterChipTextActive: { color: COLORS.primary, fontWeight: '600' },
     exerciseDropdown: { maxHeight: 180, marginTop: SPACING.xs },
     exerciseOption: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

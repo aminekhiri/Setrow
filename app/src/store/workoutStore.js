@@ -17,6 +17,7 @@ export const useWorkoutStore = create(
             restTimeDefault: 90,
             restTimeRemaining: 0,
             isRestTimerActive: false,
+            restTimerEndAt: null, // timestamp (ms) when timer should finish
 
             // Start a new session
             startSession: (session, exercises, restTime) => {
@@ -70,13 +71,26 @@ export const useWorkoutStore = create(
                 set({ currentExerciseIndex: index });
             },
 
-            // Rest timer - starts with the current default time
+            // Rest timer - stores end timestamp for background survival
             startRestTimer: () => {
                 const { restTimeDefault } = get();
                 set({
                     restTimeRemaining: restTimeDefault,
                     isRestTimerActive: true,
+                    restTimerEndAt: Date.now() + restTimeDefault * 1000,
                 });
+            },
+
+            // Sync timer from stored end timestamp (called when app returns from background)
+            syncRestTimer: () => {
+                const { restTimerEndAt, isRestTimerActive } = get();
+                if (!isRestTimerActive || !restTimerEndAt) return;
+                const remaining = Math.max(0, Math.ceil((restTimerEndAt - Date.now()) / 1000));
+                if (remaining <= 0) {
+                    set({ isRestTimerActive: false, restTimeRemaining: 0, restTimerEndAt: null });
+                } else {
+                    set({ restTimeRemaining: remaining });
+                }
             },
 
             tickRestTimer: () => {
@@ -84,19 +98,23 @@ export const useWorkoutStore = create(
                 if (restTimeRemaining > 0) {
                     set({ restTimeRemaining: restTimeRemaining - 1 });
                 } else {
-                    set({ isRestTimerActive: false });
+                    set({ isRestTimerActive: false, restTimerEndAt: null });
                 }
             },
 
             stopRestTimer: () => {
-                set({ isRestTimerActive: false, restTimeRemaining: 0 });
+                set({ isRestTimerActive: false, restTimeRemaining: 0, restTimerEndAt: null });
             },
 
             // Change timer duration AND restart the countdown with new value
             setRestTime: (seconds) => {
                 const { isRestTimerActive } = get();
                 if (isRestTimerActive) {
-                    set({ restTimeDefault: seconds, restTimeRemaining: seconds });
+                    set({
+                        restTimeDefault: seconds,
+                        restTimeRemaining: seconds,
+                        restTimerEndAt: Date.now() + seconds * 1000,
+                    });
                 } else {
                     set({ restTimeDefault: seconds });
                 }
@@ -113,6 +131,7 @@ export const useWorkoutStore = create(
                     isActive: false,
                     isRestTimerActive: false,
                     restTimeRemaining: 0,
+                    restTimerEndAt: null,
                 });
             },
 

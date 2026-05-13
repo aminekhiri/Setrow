@@ -7,7 +7,7 @@ import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 
 export default function SessionDetailScreen({ route }) {
-    const { date, sessions: sessionsSummary } = route.params || {};
+    const { date, sessions: sessionsSummary, sessionId } = route.params || {};
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -17,7 +17,11 @@ export default function SessionDetailScreen({ route }) {
 
     const loadSessions = async () => {
         try {
-            if (sessionsSummary) {
+            if (sessionId) {
+                // Single session from GoalsScreen calendar
+                const data = await api.getSession(sessionId);
+                setSessions(data ? [data] : []);
+            } else if (sessionsSummary) {
                 const detailed = [];
                 for (const s of sessionsSummary) {
                     try {
@@ -26,7 +30,7 @@ export default function SessionDetailScreen({ route }) {
                     } catch (e) { /* skip */ }
                 }
                 setSessions(detailed);
-            } else {
+            } else if (date) {
                 const data = await api.getSessions({ from: date, to: date + 'T23:59:59' });
                 setSessions(data);
             }
@@ -43,8 +47,6 @@ export default function SessionDetailScreen({ route }) {
 
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            <Text style={styles.title}>📋 Séance du {date}</Text>
-
             {sessions.map((session, si) => (
                 <Card key={si} style={styles.sessionCard}>
                     <View style={styles.sessionHeader}>

@@ -1,17 +1,33 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { AppState } from 'react-native';
 import { useWorkoutStore } from '../store/workoutStore';
 
 export const useTimer = () => {
     const intervalRef = useRef(null);
+    const appStateRef = useRef(AppState.currentState);
     const {
         restTimeRemaining,
         isRestTimerActive,
         restTimeDefault,
+        restTimerEndAt, // timestamp when timer should reach 0
         startRestTimer,
         tickRestTimer,
         stopRestTimer,
         setRestTime,
+        syncRestTimer,
     } = useWorkoutStore();
+
+    // Handle app state changes (background → foreground)
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextAppState) => {
+            if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+                // App came back to foreground — sync timer from stored end timestamp
+                syncRestTimer();
+            }
+            appStateRef.current = nextAppState;
+        });
+        return () => subscription?.remove();
+    }, [syncRestTimer]);
 
     useEffect(() => {
         if (isRestTimerActive && restTimeRemaining > 0) {
