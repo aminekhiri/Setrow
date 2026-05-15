@@ -12,7 +12,6 @@ export default function CreateRoutineScreen({ route, navigation }) {
     const routineId = route.params?.routineId;
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [restTime, setRestTime] = useState('90');
     const [exercises, setExercises] = useState([]);
     const [loading, setLoading] = useState(false);
     const [showExercisePicker, setShowExercisePicker] = useState(false);
@@ -28,7 +27,6 @@ export default function CreateRoutineScreen({ route, navigation }) {
             const data = await api.getRoutine(routineId);
             setName(data.name);
             setDescription(data.description || '');
-            setRestTime((data.rest_time_seconds || 90).toString());
             setExercises(
                 (data.routine_exercises || []).map(re => ({
                     exercise_id: re.exercise_id,
@@ -36,6 +34,7 @@ export default function CreateRoutineScreen({ route, navigation }) {
                     muscle_group: re.exercises?.muscle_group || '',
                     target_sets: re.target_sets || 4,
                     target_reps: re.target_reps || 10,
+                    rest_time_seconds: re.rest_time_seconds || 90,
                 }))
             );
         } catch (err) {
@@ -63,6 +62,7 @@ export default function CreateRoutineScreen({ route, navigation }) {
             muscle_group: exercise.muscle_group,
             target_sets: 4,
             target_reps: 10,
+            rest_time_seconds: 90,
         }]);
         setShowExercisePicker(false);
     };
@@ -73,7 +73,7 @@ export default function CreateRoutineScreen({ route, navigation }) {
 
     const updateExercise = (index, field, value) => {
         setExercises(prev => prev.map((ex, i) =>
-            i === index ? { ...ex, [field]: parseInt(value) || 0 } : ex
+            i === index ? { ...ex, [field]: value } : ex
         ));
     };
 
@@ -86,11 +86,11 @@ export default function CreateRoutineScreen({ route, navigation }) {
             const routineData = {
                 name: name.trim(),
                 description: description.trim(),
-                rest_time_seconds: parseInt(restTime) || 90,
                 exercises: exercises.map(ex => ({
                     exercise_id: ex.exercise_id,
-                    target_sets: ex.target_sets,
-                    target_reps: ex.target_reps,
+                    target_sets: parseInt(ex.target_sets) || 4,
+                    target_reps: parseInt(ex.target_reps) || 10,
+                    rest_time_seconds: parseInt(ex.rest_time_seconds) || 90,
                 })),
             };
 
@@ -113,13 +113,6 @@ export default function CreateRoutineScreen({ route, navigation }) {
 
             <Input label="Nom de la routine" value={name} onChangeText={setName} placeholder="Ex: Push Day" />
             <Input label="Description (optionnel)" value={description} onChangeText={setDescription} placeholder="Notes..." multiline />
-            <Input
-                label="Temps de repos (secondes)"
-                value={restTime}
-                onChangeText={setRestTime}
-                keyboardType="number-pad"
-                suffix="sec"
-            />
 
             {/* Exercises list */}
             <View style={styles.exercisesSection}>
@@ -135,7 +128,7 @@ export default function CreateRoutineScreen({ route, navigation }) {
                             <View style={styles.targetInput}>
                                 <Text style={styles.targetLabel}>Séries</Text>
                                 <Input
-                                    value={ex.target_sets.toString()}
+                                    value={ex.target_sets !== undefined ? ex.target_sets.toString() : ''}
                                     onChangeText={(v) => updateExercise(index, 'target_sets', v)}
                                     keyboardType="number-pad"
                                     style={styles.smallInput}
@@ -144,8 +137,17 @@ export default function CreateRoutineScreen({ route, navigation }) {
                             <View style={styles.targetInput}>
                                 <Text style={styles.targetLabel}>Reps</Text>
                                 <Input
-                                    value={ex.target_reps.toString()}
+                                    value={ex.target_reps !== undefined ? ex.target_reps.toString() : ''}
                                     onChangeText={(v) => updateExercise(index, 'target_reps', v)}
+                                    keyboardType="number-pad"
+                                    style={styles.smallInput}
+                                />
+                            </View>
+                            <View style={styles.targetInput}>
+                                <Text style={styles.targetLabel}>Repos(s)</Text>
+                                <Input
+                                    value={ex.rest_time_seconds !== undefined ? ex.rest_time_seconds.toString() : ''}
+                                    onChangeText={(v) => updateExercise(index, 'rest_time_seconds', v)}
                                     keyboardType="number-pad"
                                     style={styles.smallInput}
                                 />

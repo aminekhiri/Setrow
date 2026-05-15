@@ -12,15 +12,18 @@ export const useWorkoutStore = create(
             sets: {}, // { sessionExerciseId: [{ set_number, weight, reps, is_completed }] }
             isActive: false,
             sessionId: null,
+            sessionStartedAt: null, // timestamp (ms) for session duration chrono
 
             // Rest timer
-            restTimeDefault: 90,
+            restTimeByExercise: {}, // { exercise_id: seconds }
+            restTimerDefaultFallback: 90,
+            restTimerCurrentDuration: 90, // duration of the currently active timer
             restTimeRemaining: 0,
             isRestTimerActive: false,
-            restTimerEndAt: null, // timestamp (ms) when timer should finish
+            restTimerEndAt: null,
 
             // Start a new session
-            startSession: (session, exercises, restTime) => {
+            startSession: (session, exercises, restTimeByExercise) => {
                 const initialSets = {};
                 exercises.forEach(ex => {
                     initialSets[ex.id] = [];
@@ -32,7 +35,9 @@ export const useWorkoutStore = create(
                     currentExerciseIndex: 0,
                     sets: initialSets,
                     isActive: true,
-                    restTimeDefault: restTime || 90,
+                    restTimeByExercise: restTimeByExercise || {},
+                    restTimerDefaultFallback: 90,
+                    sessionStartedAt: Date.now(),
                 });
             },
 
@@ -72,12 +77,14 @@ export const useWorkoutStore = create(
             },
 
             // Rest timer - stores end timestamp for background survival
-            startRestTimer: () => {
-                const { restTimeDefault } = get();
+            startRestTimer: (exerciseId) => {
+                const { restTimeByExercise, restTimerDefaultFallback } = get();
+                const duration = (exerciseId && restTimeByExercise[exerciseId]) || restTimerDefaultFallback;
                 set({
-                    restTimeRemaining: restTimeDefault,
+                    restTimerCurrentDuration: duration,
+                    restTimeRemaining: duration,
                     isRestTimerActive: true,
-                    restTimerEndAt: Date.now() + restTimeDefault * 1000,
+                    restTimerEndAt: Date.now() + duration * 1000,
                 });
             },
 
@@ -106,21 +113,22 @@ export const useWorkoutStore = create(
                 set({ isRestTimerActive: false, restTimeRemaining: 0, restTimerEndAt: null });
             },
 
-            // Change timer duration AND restart the countdown with new value
-            setRestTime: (seconds) => {
-                const { isRestTimerActive } = get();
+            // Change timer duration for a specific exercise
+            setRestTime: (exerciseId, seconds) => {
+                const { restTimeByExercise, isRestTimerActive } = get();
+                const updated = { ...restTimeByExercise, [exerciseId]: seconds };
                 if (isRestTimerActive) {
                     set({
-                        restTimeDefault: seconds,
+                        restTimeByExercise: updated,
+                        restTimerCurrentDuration: seconds,
                         restTimeRemaining: seconds,
                         restTimerEndAt: Date.now() + seconds * 1000,
                     });
                 } else {
-                    set({ restTimeDefault: seconds });
+                    set({ restTimeByExercise: updated });
                 }
             },
 
-            // End session
             finishSession: () => {
                 set({
                     currentSession: null,
@@ -132,6 +140,9 @@ export const useWorkoutStore = create(
                     isRestTimerActive: false,
                     restTimeRemaining: 0,
                     restTimerEndAt: null,
+                    restTimeByExercise: {},
+                    restTimerCurrentDuration: 90,
+                    sessionStartedAt: null,
                 });
             },
 

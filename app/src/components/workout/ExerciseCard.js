@@ -3,24 +3,14 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, FONTS, SPACING, SHADOWS } from '../../constants/theme';
 import Badge from '../ui/Badge';
+import MuscleImage from '../ui/MuscleImage';
 
 export default function ExerciseCard({ exercise, onPress, onFavorite, showFavorite = true }) {
-    const muscleIcons = {
-        pectoraux: '🫁',
-        dos: '🔙',
-        epaules: '💪',
-        biceps: '💪',
-        triceps: '🦾',
-        jambes: '🦵',
-        abdominaux: '🎯',
-        mollets: '🦶',
-        'avant-bras': '🤜',
-    };
 
     return (
         <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={[styles.card, SHADOWS.small]}>
             <View style={styles.iconContainer}>
-                <Text style={styles.icon}>{muscleIcons[exercise.muscle_group] || '🏋️'}</Text>
+                <MuscleImage muscleGroup={exercise.muscle_group} size={60} />
             </View>
 
             <View style={styles.info}>
@@ -55,17 +45,15 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.sm,
     },
     iconContainer: {
-        width: 44,
-        height: 44,
+        width: 60,
+        height: 60,
         borderRadius: RADIUS.md,
         backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: SPACING.md,
     },
-    icon: {
-        fontSize: 22,
-    },
+
     info: {
         flex: 1,
         gap: SPACING.xs,

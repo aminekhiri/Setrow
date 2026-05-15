@@ -7,6 +7,7 @@ import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { TouchableOpacity } from 'react-native';
+import MuscleImage from '../../components/ui/MuscleImage';
 
 export default function CreateExerciseScreen({ navigation }) {
     const [name, setName] = useState('');
@@ -54,7 +55,7 @@ export default function CreateExerciseScreen({ navigation }) {
                         onPress={() => setSelectedMuscle(mg.id)}
                         style={[styles.muscleChip, selectedMuscle === mg.id && styles.muscleChipActive]}
                     >
-                        <Text style={styles.muscleEmoji}>{mg.icon}</Text>
+                        <MuscleImage muscleGroup={mg.id} size={20} />
                         <Text style={[styles.muscleText, selectedMuscle === mg.id && styles.muscleTextActive]}>
                             {mg.name}
                         </Text>
@@ -94,7 +95,7 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: COLORS.border,
     },
     muscleChipActive: { backgroundColor: COLORS.primaryGlow, borderColor: COLORS.primary },
-    muscleEmoji: { fontSize: 16 },
+
     muscleText: { color: COLORS.textSecondary, fontSize: FONTS.sizes.sm },
     muscleTextActive: { color: COLORS.primary, fontWeight: '600' },
 });

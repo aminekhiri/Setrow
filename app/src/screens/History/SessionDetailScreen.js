@@ -57,22 +57,35 @@ export default function SessionDetailScreen({ route }) {
                     </View>
                     <Text style={styles.sessionDate}>{formatDateTime(session.started_at)}</Text>
 
-                    {(session.session_exercises || []).map((se, ei) => (
-                        <View key={ei} style={styles.exerciseBlock}>
-                            <View style={styles.exerciseNameRow}>
-                                <Text style={styles.exerciseBlockName}>{se.exercises?.name}</Text>
-                                <Badge label={se.exercises?.muscle_group} />
-                            </View>
-                            {(se.sets || []).map((set, seti) => (
-                                <View key={seti} style={styles.setLine}>
-                                    <Text style={styles.setNum}>S{set.set_number}</Text>
-                                    <Text style={styles.setWeight}>{set.weight} kg</Text>
-                                    <Text style={styles.setReps}>× {set.reps}</Text>
-                                    {set.is_completed && <Text style={styles.setCheck}>✓</Text>}
+                    {(session.session_exercises || []).map((se, ei) => {
+                        const exType = se.exercises?.exercise_type || 'weighted';
+                        return (
+                            <View key={ei} style={styles.exerciseBlock}>
+                                <View style={styles.exerciseNameRow}>
+                                    <Text style={styles.exerciseBlockName}>{se.exercises?.name}</Text>
+                                    <Badge label={se.exercises?.muscle_group} />
                                 </View>
-                            ))}
-                        </View>
-                    ))}
+                                {(se.sets || []).map((set, seti) => (
+                                    <View key={seti} style={styles.setLine}>
+                                        <Text style={styles.setNum}>S{set.set_number}</Text>
+                                        {exType === 'timed' ? (
+                                            <Text style={styles.setWeight}>{set.reps}s</Text>
+                                        ) : (
+                                            <>
+                                                {(exType !== 'bodyweight' || set.weight > 0) && (
+                                                    <Text style={styles.setWeight}>
+                                                        {exType === 'bodyweight' ? `+${set.weight}` : set.weight} kg
+                                                    </Text>
+                                                )}
+                                                <Text style={styles.setReps}>× {set.reps}</Text>
+                                            </>
+                                        )}
+                                        {set.is_completed && <Text style={styles.setCheck}>✓</Text>}
+                                    </View>
+                                ))}
+                            </View>
+                        );
+                    })}
                 </Card>
             ))}
 

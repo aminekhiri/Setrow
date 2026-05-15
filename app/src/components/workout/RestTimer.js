@@ -5,8 +5,8 @@ import Svg, { Circle } from 'react-native-svg';
 import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/theme';
 import { useTimer } from '../../hooks/useTimer';
 
-export default function RestTimer({ onSkip }) {
-    const { timeRemaining, isActive, formattedTime, progress, stop, defaultTime, setTime } = useTimer();
+export default function RestTimer({ onSkip, exerciseId }) {
+    const { timeRemaining, isActive, formattedTime, progress, stop, currentDuration, setTime } = useTimer();
 
     if (!isActive) return null;
 
@@ -63,10 +63,10 @@ export default function RestTimer({ onSkip }) {
                         {[60, 90, 120, 180].map(t => (
                             <TouchableOpacity
                                 key={t}
-                                onPress={() => setTime(t)}
-                                style={[styles.timeOption, defaultTime === t && styles.timeOptionActive]}
+                                onPress={() => setTime(exerciseId, t)}
+                                style={[styles.timeOption, currentDuration === t && styles.timeOptionActive]}
                             >
-                                <Text style={[styles.timeOptionText, defaultTime === t && styles.timeOptionTextActive]}>
+                                <Text style={[styles.timeOptionText, currentDuration === t && styles.timeOptionTextActive]}>
                                     {t >= 60 ? `${Math.floor(t / 60)}:${(t % 60).toString().padStart(2, '0')}` : `${t}s`}
                                 </Text>
                             </TouchableOpacity>

@@ -7,10 +7,18 @@ import ProgressChart from '../../components/charts/ProgressChart';
 import WeightChart from '../../components/charts/WeightChart';
 import Modal from '../../components/ui/Modal';
 
+const EXERCISE_PERIODS = [
+    { key: 'month', label: '1 mois' },
+    { key: '3months', label: '3 mois' },
+    { key: '6months', label: '6 mois' },
+    { key: 'year', label: '1 an' },
+];
+
 export default function StatsScreen() {
     const [exercises, setExercises] = useState([]);
     const [selectedExercise, setSelectedExercise] = useState(null);
     const [exerciseStats, setExerciseStats] = useState([]);
+    const [exercisePeriod, setExercisePeriod] = useState('3months');
     const [weightData, setWeightData] = useState([]);
     const [weightPeriod, setWeightPeriod] = useState('month');
     const [loading, setLoading] = useState(false);
@@ -39,18 +47,31 @@ export default function StatsScreen() {
     const selectExercise = async (exercise) => {
         setSelectedExercise(exercise);
         setShowPicker(false);
+        loadExerciseStats(exercise.id, exercisePeriod);
+    };
+
+    const loadExerciseStats = async (exerciseId, period) => {
         setLoading(true);
         try {
-            const data = await api.getExerciseStats(exercise.id, '3months');
+            const data = await api.getExerciseStats(exerciseId, period);
             setExerciseStats(data);
         } catch (err) { console.error(err); }
         setLoading(false);
+    };
+
+    const handlePeriodChange = (period) => {
+        setExercisePeriod(period);
+        if (selectedExercise) {
+            loadExerciseStats(selectedExercise.id, period);
+        }
     };
 
     const exerciseChartData = exerciseStats.map(s => ({
         value: s.max_weight,
         label: formatShortDate(s.date),
     }));
+
+    const periodLabel = EXERCISE_PERIODS.find(p => p.key === exercisePeriod)?.label || '3 mois';
 
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -75,13 +96,29 @@ export default function StatsScreen() {
                     </Text>
                 </TouchableOpacity>
 
+                {selectedExercise && (
+                    <View style={styles.periodSelector}>
+                        {EXERCISE_PERIODS.map(p => (
+                            <TouchableOpacity
+                                key={p.key}
+                                onPress={() => handlePeriodChange(p.key)}
+                                style={[styles.periodButton, exercisePeriod === p.key && styles.periodActive]}
+                            >
+                                <Text style={[styles.periodText, exercisePeriod === p.key && styles.periodTextActive]}>
+                                    {p.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+
                 {loading ? (
                     <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
                 ) : selectedExercise ? (
-                    <View style={{ marginTop: SPACING.lg }}>
+                    <View style={{ marginTop: SPACING.sm }}>
                         <ProgressChart
                             data={exerciseChartData}
-                            title={`${selectedExercise.name} — Poids max (3 mois)`}
+                            title={`${selectedExercise.name} — Poids max (${periodLabel})`}
                         />
                     </View>
                 ) : null}
@@ -117,6 +154,28 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: COLORS.border,
     },
     exercisePickerText: { color: COLORS.textSecondary, fontSize: FONTS.sizes.md },
+    periodSelector: {
+        flexDirection: 'row',
+        gap: SPACING.sm,
+        marginTop: SPACING.lg,
+    },
+    periodButton: {
+        paddingVertical: SPACING.sm,
+        paddingHorizontal: SPACING.md,
+        borderRadius: RADIUS.full,
+        backgroundColor: COLORS.surfaceLight,
+    },
+    periodActive: {
+        backgroundColor: COLORS.primary,
+    },
+    periodText: {
+        color: COLORS.textMuted,
+        fontSize: FONTS.sizes.xs,
+        fontWeight: '500',
+    },
+    periodTextActive: {
+        color: COLORS.white,
+    },
     exerciseOption: {
         paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border,
     },

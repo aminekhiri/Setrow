@@ -10,10 +10,24 @@ const PERIODS = [
 ];
 
 export default function WeightChart({ data, selectedPeriod, onPeriodChange }) {
-    const chartData = (data || []).map(d => ({
-        value: d.weight,
-        label: new Date(d.logged_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-    }));
+    // Deduplicate: keep only the last entry per day
+    const byDay = {};
+    (data || []).forEach(d => {
+        const dateKey = new Date(d.logged_at).toISOString().split('T')[0];
+        byDay[dateKey] = d;
+    });
+    const uniqueData = Object.values(byDay);
+
+    const chartData = uniqueData.map(d => {
+        const date = new Date(d.logged_at);
+        let label;
+        if (selectedPeriod === 'year') {
+            label = date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+        } else {
+            label = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+        }
+        return { value: d.weight, label };
+    });
 
     return (
         <View>

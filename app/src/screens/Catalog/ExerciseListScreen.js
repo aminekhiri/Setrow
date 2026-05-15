@@ -6,6 +6,7 @@ import { MUSCLE_GROUPS } from '../../constants/defaultData';
 import { api } from '../../api/client';
 import ExerciseCard from '../../components/workout/ExerciseCard';
 import EmptyState from '../../components/ui/EmptyState';
+import MuscleImage from '../../components/ui/MuscleImage';
 
 export default function ExerciseListScreen({ navigation }) {
     const [exercises, setExercises] = useState([]);
@@ -80,7 +81,7 @@ export default function ExerciseListScreen({ navigation }) {
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                data={[{ id: null, name: 'Tous', icon: '🏋️' }, ...MUSCLE_GROUPS]}
+                data={[{ id: null, name: 'Tous' }, ...MUSCLE_GROUPS]}
                 keyExtractor={(item) => item.id || 'all'}
                 contentContainerStyle={styles.filterContainer}
                 renderItem={({ item }) => (
@@ -88,7 +89,11 @@ export default function ExerciseListScreen({ navigation }) {
                         onPress={() => setSelectedMuscle(item.id)}
                         style={[styles.filterChip, selectedMuscle === item.id && styles.filterChipActive]}
                     >
-                        <Text style={styles.filterEmoji}>{item.icon}</Text>
+                        {item.id ? (
+                            <MuscleImage muscleGroup={item.id} size={18} />
+                        ) : (
+                            <Ionicons name="barbell-outline" size={18} color={selectedMuscle === null ? COLORS.primary : COLORS.textMuted} />
+                        )}
                         <Text style={[styles.filterText, selectedMuscle === item.id && styles.filterTextActive]}>
                             {item.name}
                         </Text>
@@ -124,7 +129,10 @@ export default function ExerciseListScreen({ navigation }) {
                         const mg = MUSCLE_GROUPS.find(m => m.id === group);
                         return (
                             <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>{mg?.icon} {mg?.name || group}</Text>
+                                <View style={styles.sectionTitle}>
+                                    <MuscleImage muscleGroup={group} size={20} />
+                                    <Text style={styles.sectionTitleText}>{mg?.name || group}</Text>
+                                </View>
                                 {exs.map(ex => (
                                     <ExerciseCard
                                         key={ex.id}
@@ -179,7 +187,8 @@ const styles = StyleSheet.create({
     filterTextActive: { color: COLORS.primary },
     list: { padding: SPACING.lg },
     section: { marginBottom: SPACING.xl },
-    sectionTitle: { color: COLORS.text, fontSize: FONTS.sizes.lg, fontWeight: '700', marginBottom: SPACING.md },
+    sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
+    sectionTitleText: { color: COLORS.text, fontSize: FONTS.sizes.lg, fontWeight: '700' },
     fab: {
         position: 'absolute', bottom: 24, right: 24, width: 56, height: 56,
         borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center',

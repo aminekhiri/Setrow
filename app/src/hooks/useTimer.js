@@ -1,6 +1,55 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useWorkoutStore } from '../store/workoutStore';
+
+// Configure notification handler so notifications show even in foreground
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
+
+const requestNotificationPermissions = async () => {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    if (existingStatus === 'granted') return true;
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === 'granted';
+};
+
+const scheduleTimerNotification = async (seconds) => {
+    try {
+        const granted = await requestNotificationPermissions();
+        if (!granted) return;
+
+        // Cancel any existing timer notifications first
+        await Notifications.cancelAllScheduledNotificationsAsync();
+
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title: '⏱ Repos terminé !',
+                body: 'Reprends ta séance ! 💪',
+                sound: true,
+            },
+            trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+                seconds: Math.max(1, seconds),
+            },
+        });
+    } catch (err) {
+        console.warn('Notification scheduling error:', err);
+    }
+};
+
+const cancelTimerNotification = async () => {
+    try {
+        await Notifications.cancelAllScheduledNotificationsAsync();
+    } catch (err) {
+        console.warn('Notification cancel error:', err);
+    }
+};
 
 export const useTimer = () => {
     const intervalRef = useRef(null);
@@ -8,8 +57,8 @@ export const useTimer = () => {
     const {
         restTimeRemaining,
         isRestTimerActive,
-        restTimeDefault,
-        restTimerEndAt, // timestamp when timer should reach 0
+        restTimerCurrentDuration,
+        restTimerEndAt,
         startRestTimer,
         tickRestTimer,
         stopRestTimer,
@@ -23,6 +72,8 @@ export const useTimer = () => {
             if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
                 // App came back to foreground — sync timer from stored end timestamp
                 syncRestTimer();
+                // Cancel notification since user is back in the app
+                cancelTimerNotification();
             }
             appStateRef.current = nextAppState;
         });
@@ -39,6 +90,10 @@ export const useTimer = () => {
                 clearInterval(intervalRef.current);
                 intervalRef.current = null;
             }
+            // Timer just finished — cancel notification (we're in the app)
+            if (!isRestTimerActive) {
+                cancelTimerNotification();
+            }
         }
 
         return () => {
@@ -54,18 +109,43 @@ export const useTimer = () => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }, []);
 
-    const progress = restTimeDefault > 0
-        ? (restTimeDefault - restTimeRemaining) / restTimeDefault
+    const progress = restTimerCurrentDuration > 0
+        ? (restTimerCurrentDuration - restTimeRemaining) / restTimerCurrentDuration
         : 0;
+
+    // Wrapped start that also schedules a notification
+    const startWithNotification = useCallback((exerciseId) => {
+        startRestTimer(exerciseId);
+        // Read the resolved duration from store after starting
+        setTimeout(() => {
+            const { restTimerCurrentDuration: d } = useWorkoutStore.getState();
+            scheduleTimerNotification(d);
+        }, 0);
+    }, [startRestTimer]);
+
+    // Wrapped stop that also cancels the notification
+    const stopWithNotification = useCallback(() => {
+        stopRestTimer();
+        cancelTimerNotification();
+    }, [stopRestTimer]);
+
+    // Wrapped setTime that also reschedules the notification
+    const setTimeWithNotification = useCallback((exerciseId, seconds) => {
+        setRestTime(exerciseId, seconds);
+        const { isRestTimerActive: active } = useWorkoutStore.getState();
+        if (active) {
+            scheduleTimerNotification(seconds);
+        }
+    }, [setRestTime]);
 
     return {
         timeRemaining: restTimeRemaining,
         isActive: isRestTimerActive,
-        defaultTime: restTimeDefault,
+        currentDuration: restTimerCurrentDuration,
         formattedTime: formatTime(restTimeRemaining),
         progress,
-        start: startRestTimer,
-        stop: stopRestTimer,
-        setTime: setRestTime,
+        start: startWithNotification,
+        stop: stopWithNotification,
+        setTime: setTimeWithNotification,
     };
 };

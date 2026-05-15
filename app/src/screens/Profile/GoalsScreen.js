@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, Modal as RNModal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, Modal as RNModal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
@@ -139,11 +139,11 @@ export default function GoalsScreen({ navigation }) {
         e.name.toLowerCase().includes(exerciseSearch.toLowerCase())
     );
 
-    // Compute total and monthly session counts
-    const totalSessions = Object.keys(markedDates).length;
-    const monthlySessions = Object.keys(markedDates).filter(dateKey => {
-        const [y, m] = dateKey.split('-');
-        return parseInt(y) === calendarMonth.year && parseInt(m) === calendarMonth.month;
+    // Compute total and monthly session counts (actual finished sessions, not unique days)
+    const totalSessions = sessions.length;
+    const monthlySessions = sessions.filter(s => {
+        const d = new Date(s.started_at);
+        return d.getFullYear() === calendarMonth.year && (d.getMonth() + 1) === calendarMonth.month;
     }).length;
 
     if (loading) {
@@ -303,15 +303,24 @@ export default function GoalsScreen({ navigation }) {
 
                                         <View style={styles.goalTarget}>
                                             <Text style={styles.goalTargetText}>
-                                                🎯 {g.target_weight > 0 ? `${g.target_weight} kg` : ''}{g.target_weight > 0 && g.target_reps > 0 ? ' × ' : ''}{g.target_reps > 0 ? `${g.target_reps} reps` : ''}
+                                                🎯 {g.target_weight > 0 ? `${g.target_weight} kg` : ''}{g.target_weight > 0 && g.target_reps > 0 ? ' × ' : ''}{g.target_reps > 0 ? `${g.target_reps} ${(g.exercises?.exercise_type === 'timed') ? 'sec' : 'reps'}` : ''}
                                             </Text>
                                             {isAchieved && <Text style={styles.achieved}>✅ Atteint !</Text>}
                                         </View>
 
-                                        {g.current_1rm > 0 && (
-                                            <Text style={styles.currentPerf}>
-                                                💪 Meilleur 1RM estimé : {Math.round(g.current_1rm)} kg
-                                            </Text>
+                                        {(g.exercises?.exercise_type === 'bodyweight' || g.exercises?.exercise_type === 'timed') ? (
+                                            g.current_reps > 0 && (
+                                                <Text style={styles.currentPerf}>
+                                                    💪 Meilleur : {g.current_reps} {g.exercises?.exercise_type === 'timed' ? 'sec' : 'reps'}
+                                                    {g.current_weight > 0 ? ` (+${g.current_weight}kg)` : ''}
+                                                </Text>
+                                            )
+                                        ) : (
+                                            g.current_1rm > 0 && (
+                                                <Text style={styles.currentPerf}>
+                                                    💪 Meilleur 1RM estimé : {Math.round(g.current_1rm)} kg
+                                                </Text>
+                                            )
                                         )}
 
                                         <View style={styles.progressBarBg}>
@@ -346,7 +355,10 @@ export default function GoalsScreen({ navigation }) {
 
             {/* Goal creation modal */}
             <RNModal visible={showGoalModal} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    style={styles.modalOverlay}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Nouvel objectif</Text>
@@ -355,75 +367,89 @@ export default function GoalsScreen({ navigation }) {
                             </TouchableOpacity>
                         </View>
 
-                        {/* Exercise search */}
-                        <Text style={styles.fieldLabel}>Exercice</Text>
-                        <TextInput
-                            style={styles.inputLarge}
-                            placeholder="Rechercher un exercice..."
-                            placeholderTextColor={COLORS.textMuted}
-                            value={exerciseSearch}
-                            onChangeText={setExerciseSearch}
-                            autoFocus={true}
-                        />
+                        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                            {/* Exercise search */}
+                            <Text style={styles.fieldLabel}>Exercice</Text>
+                            <TextInput
+                                style={styles.inputLarge}
+                                placeholder="Rechercher un exercice..."
+                                placeholderTextColor={COLORS.textMuted}
+                                value={exerciseSearch}
+                                onChangeText={setExerciseSearch}
+                                autoFocus={true}
+                            />
 
-                        {exerciseSearch.length > 0 && (
-                            <ScrollView style={styles.exerciseDropdown} nestedScrollEnabled>
-                                {filteredExercises.slice(0, 8).map(ex => (
-                                    <TouchableOpacity
-                                        key={ex.id}
-                                        onPress={() => {
-                                            setSelectedExerciseId(ex.id);
-                                            setExerciseSearch(ex.name);
-                                        }}
-                                        style={[styles.exerciseOption, selectedExerciseId === ex.id && styles.exerciseOptionActive]}
-                                    >
-                                        <Text style={styles.exerciseOptionText}>{ex.name}</Text>
-                                        <Badge label={ex.muscle_group} />
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        )}
+                            {exerciseSearch.length > 0 && (
+                                <ScrollView style={styles.exerciseDropdown} nestedScrollEnabled>
+                                    {filteredExercises.slice(0, 8).map(ex => (
+                                        <TouchableOpacity
+                                            key={ex.id}
+                                            onPress={() => {
+                                                setSelectedExerciseId(ex.id);
+                                                setExerciseSearch(ex.name);
+                                            }}
+                                            style={[styles.exerciseOption, selectedExerciseId === ex.id && styles.exerciseOptionActive]}
+                                        >
+                                            <Text style={styles.exerciseOptionText}>{ex.name}</Text>
+                                            <Badge label={ex.muscle_group} />
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            )}
 
-                        {selectedExerciseId && (
-                            <View style={styles.selectedExBadge}>
-                                <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                                <Text style={styles.selectedExText}>{exerciseSearch}</Text>
+                            {selectedExerciseId && (
+                                <View style={styles.selectedExBadge}>
+                                    <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                                    <Text style={styles.selectedExText}>{exerciseSearch}</Text>
+                                </View>
+                            )}
+
+                            <View style={styles.goalInputRow}>
+                                {(() => {
+                                    const selectedEx = exercises.find(e => e.id === selectedExerciseId);
+                                    const exType = selectedEx?.exercise_type || 'weighted';
+                                    const showWeight = exType === 'weighted';
+                                    const isTimed = exType === 'timed';
+                                    return (
+                                        <>
+                                            {showWeight && (
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.fieldLabel}>Poids cible (kg)</Text>
+                                                    <TextInput
+                                                        ref={weightRef}
+                                                        style={styles.input}
+                                                        placeholder="ex: 100"
+                                                        placeholderTextColor={COLORS.textMuted}
+                                                        value={goalWeight}
+                                                        onChangeText={setGoalWeight}
+                                                        keyboardType="decimal-pad"
+                                                        returnKeyType="next"
+                                                        onSubmitEditing={() => repsRef.current?.focus()}
+                                                    />
+                                                </View>
+                                            )}
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.fieldLabel}>{isTimed ? 'Secondes cibles' : 'Reps cibles'}</Text>
+                                                <TextInput
+                                                    ref={repsRef}
+                                                    style={styles.input}
+                                                    placeholder={isTimed ? 'ex: 60' : 'ex: 8'}
+                                                    placeholderTextColor={COLORS.textMuted}
+                                                    value={goalReps}
+                                                    onChangeText={setGoalReps}
+                                                    keyboardType="number-pad"
+                                                    returnKeyType="done"
+                                                />
+                                            </View>
+                                        </>
+                                    );
+                                })()}
                             </View>
-                        )}
 
-                        <View style={styles.goalInputRow}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.fieldLabel}>Poids cible (kg)</Text>
-                                <TextInput
-                                    ref={weightRef}
-                                    style={styles.input}
-                                    placeholder="ex: 100"
-                                    placeholderTextColor={COLORS.textMuted}
-                                    value={goalWeight}
-                                    onChangeText={setGoalWeight}
-                                    keyboardType="decimal-pad"
-                                    returnKeyType="next"
-                                    onSubmitEditing={() => repsRef.current?.focus()}
-                                />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.fieldLabel}>Reps cibles</Text>
-                                <TextInput
-                                    ref={repsRef}
-                                    style={styles.input}
-                                    placeholder="ex: 8"
-                                    placeholderTextColor={COLORS.textMuted}
-                                    value={goalReps}
-                                    onChangeText={setGoalReps}
-                                    keyboardType="number-pad"
-                                    returnKeyType="done"
-                                />
-                            </View>
-                        </View>
-
-                        <Button title="Créer l'objectif" onPress={handleCreateGoal} style={{ marginTop: SPACING.lg }} />
+                            <Button title="Créer l'objectif" onPress={handleCreateGoal} style={{ marginTop: SPACING.lg, marginBottom: SPACING.lg }} />
+                        </ScrollView>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </RNModal>
         </View>
     );
@@ -470,10 +496,10 @@ const styles = StyleSheet.create({
     progressBarFg: { height: '100%', borderRadius: 4 },
     progressText: { color: COLORS.textMuted, fontSize: FONTS.sizes.xs, marginTop: 4, textAlign: 'right' },
     // Modal
-    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+    modalOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: SPACING.lg },
     modalContent: {
-        backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,
-        padding: SPACING.xl, paddingBottom: 40, maxHeight: '85%',
+        backgroundColor: COLORS.surface, borderRadius: RADIUS.xl,
+        padding: SPACING.xl, maxHeight: '80%',
     },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
     modalTitle: { color: COLORS.text, fontSize: FONTS.sizes.lg, fontWeight: '700' },

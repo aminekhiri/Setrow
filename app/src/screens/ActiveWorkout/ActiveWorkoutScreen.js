@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/theme';
@@ -8,25 +8,52 @@ import SetRow from '../../components/workout/SetRow';
 import RestTimer from '../../components/workout/RestTimer';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import { useTimer } from '../../hooks/useTimer';
+
+const formatElapsed = (totalSecs) => {
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (hrs > 0) return `${hrs}h${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
 export default function ActiveWorkoutScreen({ route, navigation }) {
     const routineId = route.params?.routineId;
     const {
         currentExercises, currentExerciseIndex, sets, isActive,
         startSession, addSet, goToExercise,
-        startRestTimer, stopRestTimer, finishSession: clearSession,
+        stopRestTimer, finishSession: clearSession,
     } = useWorkoutStore();
 
     const [loading, setLoading] = useState(true);
     const [previousPerfs, setPreviousPerfs] = useState({});
     const [sessionId, setSessionId] = useState(null);
     const [routineData, setRoutineData] = useState(null);
+    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+    const chronoRef = useRef(null);
+
+    const { start: startTimer } = useTimer();
 
     useEffect(() => {
         // Always start fresh — clear stale sessions
         clearSession();
         initSession();
     }, []);
+
+    // Session duration chrono
+    useEffect(() => {
+        const { sessionStartedAt } = useWorkoutStore.getState();
+        if (sessionStartedAt) {
+            chronoRef.current = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - sessionStartedAt) / 1000);
+                setElapsedSeconds(elapsed);
+            }, 1000);
+        }
+        return () => {
+            if (chronoRef.current) clearInterval(chronoRef.current);
+        };
+    }, [loading]);
 
     const initSession = async () => {
         try {
@@ -51,12 +78,14 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
                     exercise_id: se.exercise_id,
                     name: se.exercises?.name || '',
                     muscle_group: se.exercises?.muscle_group || '',
+                    exercise_type: se.exercises?.exercise_type || 'weighted',
                     target_sets: re?.target_sets || 4,
                     target_reps: re?.target_reps || 10,
                 };
             });
 
-            startSession(session, exercises, routine?.rest_time_seconds || 90);
+            // Session endpoint now returns _restTimeByExercise in the response
+            startSession(session, exercises, session._restTimeByExercise || {});
 
             // Load previous performances
             const perfs = {};
@@ -92,7 +121,7 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
             console.error('Save set error:', err);
         }
 
-        startRestTimer();
+        startTimer(exerciseId);
     };
 
     const handleSkipTimer = () => {
@@ -110,6 +139,7 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
                     } catch (e) { /* ignore */ }
 
                     const recapData = buildRecapData();
+                    if (chronoRef.current) clearInterval(chronoRef.current);
                     clearSession();
                     navigation.replace('SessionRecap', { recap: recapData });
                 },
@@ -156,6 +186,7 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
             totalSets, totalVolume,
             exerciseCount: currentExercises.length,
             exercises: exerciseRecaps,
+            durationSeconds: elapsedSeconds,
         };
     };
 
@@ -189,7 +220,10 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Ionicons name="close" size={22} color={COLORS.textMuted} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle} numberOfLines={1}>{routineData?.name || 'Séance'}</Text>
+                <View style={styles.headerCenter}>
+                    <Text style={styles.headerTitle} numberOfLines={1}>{routineData?.name || 'Séance'}</Text>
+                    <Text style={styles.chronoText}>⏱ {formatElapsed(elapsedSeconds)}</Text>
+                </View>
                 <TouchableOpacity onPress={handleFinish} style={styles.finishBtn}>
                     <Ionicons name="checkmark-done" size={18} color={COLORS.white} />
                     <Text style={styles.finishText}>Terminer</Text>
@@ -221,7 +255,7 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
                     <Text style={styles.exerciseName}>{currentExercise?.name}</Text>
                     <Badge label={currentExercise?.muscle_group} />
                     <Text style={styles.target}>
-                        Objectif: {targetSets} × {currentExercise?.target_reps || 10} reps — {currentSets.length}/{targetSets} validées
+                        Objectif: {targetSets} × {currentExercise?.target_reps || 10} {currentExercise?.exercise_type === 'timed' ? 'sec' : 'reps'} — {currentSets.length}/{targetSets} validées
                     </Text>
                 </View>
 
@@ -237,12 +271,14 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
                 {/* Completed sets */}
                 {currentSets.map((s, i) => (
                     <SetRow key={`done-${i}`} setNumber={i + 1} weight={s.weight} reps={s.reps} isCompleted={true}
+                        exerciseType={currentExercise?.exercise_type}
                         previousWeight={prevPerf[i]?.weight} previousReps={prevPerf[i]?.reps} />
                 ))}
 
                 {/* ONE new set at a time */}
                 {currentSets.length < targetSets && (
                     <SetRow key={`new-${currentSets.length}`} setNumber={currentSets.length + 1}
+                        exerciseType={currentExercise?.exercise_type}
                         previousWeight={prevPerf[currentSets.length]?.weight} previousReps={prevPerf[currentSets.length]?.reps}
                         onValidate={(data) => handleValidateSet(currentExercise.id, data)} />
                 )}
@@ -252,12 +288,13 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
                         <Ionicons name="checkmark-circle" size={32} color={COLORS.success} />
                         <Text style={styles.allDoneText}>Objectif atteint ! 💪</Text>
                         <SetRow key={`extra-${currentSets.length}`} setNumber={currentSets.length + 1}
+                            exerciseType={currentExercise?.exercise_type}
                             onValidate={(data) => handleValidateSet(currentExercise.id, data)} />
                     </View>
                 )}
             </ScrollView>
 
-            <RestTimer onSkip={handleSkipTimer} />
+            <RestTimer onSkip={handleSkipTimer} exerciseId={currentExercise?.id} />
         </SafeAreaView>
     );
 }
@@ -270,7 +307,9 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1, borderBottomColor: COLORS.border,
     },
     backBtn: { padding: 4 },
-    headerTitle: { color: COLORS.text, fontSize: FONTS.sizes.md, fontWeight: '600', flex: 1, textAlign: 'center', marginHorizontal: SPACING.sm },
+    headerCenter: { flex: 1, alignItems: 'center', marginHorizontal: SPACING.sm },
+    headerTitle: { color: COLORS.text, fontSize: FONTS.sizes.md, fontWeight: '600', textAlign: 'center' },
+    chronoText: { color: COLORS.primary, fontSize: FONTS.sizes.xs, fontWeight: '600', marginTop: 2 },
     finishBtn: {
         flexDirection: 'row', alignItems: 'center', gap: 4,
         backgroundColor: COLORS.success, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,

@@ -10,6 +10,7 @@ export default function SetRow({
     isCompleted = false,
     previousWeight,
     previousReps,
+    exerciseType = 'weighted', // 'weighted' | 'bodyweight' | 'timed'
     onValidate,
     onUpdate,
 }) {
@@ -17,12 +18,29 @@ export default function SetRow({
     const [reps, setReps] = useState(initialReps.toString());
     const [completed, setCompleted] = useState(isCompleted);
 
+    const isTimed = exerciseType === 'timed';
+    const isBodyweight = exerciseType === 'bodyweight';
+
     const handleValidate = () => {
         const w = parseFloat(weight) || 0;
         const r = parseInt(reps) || 0;
         setCompleted(true);
         if (onValidate) onValidate({ weight: w, reps: r });
     };
+
+    const formatPrevious = () => {
+        if (previousWeight === undefined && previousReps === undefined) return null;
+        if (isTimed) return `${previousReps || 0}s`;
+        if (isBodyweight) {
+            if (previousWeight && previousWeight > 0) {
+                return `+${previousWeight}kg × ${previousReps || 0}`;
+            }
+            return `${previousReps || 0} reps`;
+        }
+        return `${previousWeight || 0}kg × ${previousReps || 0}`;
+    };
+
+    const prevText = formatPrevious();
 
     return (
         <View style={[styles.row, completed && styles.completedRow]}>
@@ -32,28 +50,43 @@ export default function SetRow({
                 </Text>
             </View>
 
-            {previousWeight !== undefined && (
+            {prevText && (
                 <View style={styles.previousCol}>
-                    <Text style={styles.previousText}>
-                        {previousWeight}kg × {previousReps}
-                    </Text>
+                    <Text style={styles.previousText}>{prevText}</Text>
                 </View>
             )}
 
-            <View style={styles.inputCol}>
-                <TextInput
-                    style={[styles.input, completed && styles.completedInput]}
-                    value={weight}
-                    onChangeText={setWeight}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={COLORS.textMuted}
-                    editable={!completed}
-                />
-                <Text style={styles.unit}>kg</Text>
-            </View>
+            {/* Weight field: hidden for timed, optional small for bodyweight */}
+            {isTimed ? null : isBodyweight ? (
+                <View style={styles.inputColSmall}>
+                    <TextInput
+                        style={[styles.inputSmall, completed && styles.completedInput]}
+                        value={weight}
+                        onChangeText={setWeight}
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={COLORS.textMuted}
+                        editable={!completed}
+                    />
+                    <Text style={styles.unitSmall}>+kg</Text>
+                </View>
+            ) : (
+                <View style={styles.inputCol}>
+                    <TextInput
+                        style={[styles.input, completed && styles.completedInput]}
+                        value={weight}
+                        onChangeText={setWeight}
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={COLORS.textMuted}
+                        editable={!completed}
+                    />
+                    <Text style={styles.unit}>kg</Text>
+                </View>
+            )}
 
-            <View style={styles.inputCol}>
+            {/* Reps / Seconds field */}
+            <View style={[styles.inputCol, (isTimed || isBodyweight) && styles.inputColWide]}>
                 <TextInput
                     style={[styles.input, completed && styles.completedInput]}
                     value={reps}
@@ -63,7 +96,7 @@ export default function SetRow({
                     placeholderTextColor={COLORS.textMuted}
                     editable={!completed}
                 />
-                <Text style={styles.unit}>reps</Text>
+                <Text style={styles.unit}>{isTimed ? 'sec' : 'reps'}</Text>
             </View>
 
             <TouchableOpacity
@@ -126,6 +159,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 2,
     },
+    inputColWide: {
+        flex: 1.5,
+    },
+    inputColSmall: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        width: 65,
+    },
     input: {
         backgroundColor: COLORS.surfaceLight,
         color: COLORS.text,
@@ -139,12 +182,29 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: COLORS.border,
     },
+    inputSmall: {
+        backgroundColor: COLORS.surfaceLight,
+        color: COLORS.text,
+        fontSize: FONTS.sizes.sm,
+        fontWeight: '600',
+        textAlign: 'center',
+        paddingVertical: 4,
+        paddingHorizontal: 4,
+        borderRadius: RADIUS.sm,
+        width: 36,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
     completedInput: {
         opacity: 0.7,
     },
     unit: {
         color: COLORS.textMuted,
         fontSize: FONTS.sizes.xs,
+    },
+    unitSmall: {
+        color: COLORS.textMuted,
+        fontSize: 9,
     },
     checkButton: {
         marginLeft: SPACING.sm,

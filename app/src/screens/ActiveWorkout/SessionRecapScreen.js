@@ -38,6 +38,19 @@ export default function SessionRecapScreen({ route, navigation }) {
                     <Text style={styles.summaryValue}>{recap.totalSets}</Text>
                     <Text style={styles.summaryLabel}>Séries</Text>
                 </View>
+                {recap.durationSeconds > 0 && (
+                    <>
+                        <View style={styles.divider} />
+                        <View style={styles.summaryItem}>
+                            <Text style={styles.summaryValue}>
+                                {recap.durationSeconds >= 3600
+                                    ? `${Math.floor(recap.durationSeconds / 3600)}h${Math.floor((recap.durationSeconds % 3600) / 60).toString().padStart(2, '0')}`
+                                    : `${Math.floor(recap.durationSeconds / 60)}min`}
+                            </Text>
+                            <Text style={styles.summaryLabel}>Durée</Text>
+                        </View>
+                    </>
+                )}
             </View>
 
             {/* Exercise-by-exercise breakdown */}
