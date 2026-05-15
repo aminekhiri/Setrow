@@ -24,7 +24,7 @@ router.post('/', async (req, res) => {
         if (routine_id) {
             const { data: routineExercises } = await supabase
                 .from('routine_exercises')
-                .select('exercise_id, order_index, target_sets, target_reps')
+                .select('exercise_id, order_index, target_sets, target_reps, rest_time_seconds')
                 .eq('routine_id', routine_id)
                 .order('order_index');
 
@@ -34,6 +34,11 @@ router.post('/', async (req, res) => {
                     exercise_id: re.exercise_id,
                     order_index: re.order_index,
                 }));
+
+                // Store rest_time_seconds per exercise for the app
+                session._restTimeByExercise = Object.fromEntries(
+                    routineExercises.map(re => [re.exercise_id, re.rest_time_seconds || 90])
+                );
 
                 await supabase.from('session_exercises').insert(sessionExercises);
             }
@@ -46,7 +51,7 @@ router.post('/', async (req, res) => {
                 *,
                 session_exercises (
                     id, exercise_id, order_index,
-                    exercises ( id, name, muscle_group )
+                    exercises ( id, name, muscle_group, exercise_type )
                 )
             `)
             .eq('id', session.id)
@@ -59,7 +64,7 @@ router.post('/', async (req, res) => {
             fullSession.session_exercises.sort((a, b) => a.order_index - b.order_index);
         }
 
-        res.status(201).json(fullSession);
+        res.status(201).json({ ...fullSession, _restTimeByExercise: session._restTimeByExercise || {} });
     } catch (err) {
         console.error('POST /sessions error:', err);
         res.status(500).json({ error: 'Erreur serveur' });
@@ -88,7 +93,7 @@ router.post('/:id/exercises', async (req, res) => {
                 exercise_id,
                 order_index: nextOrder,
             })
-            .select('*, exercises(id, name, muscle_group)')
+            .select('*, exercises(id, name, muscle_group, exercise_type)')
             .single();
 
         if (error) throw error;
@@ -188,7 +193,7 @@ router.get('/', async (req, res) => {
         routines ( id, name ),
         session_exercises (
           id, exercise_id, order_index,
-          exercises ( id, name, muscle_group ),
+          exercises ( id, name, muscle_group, exercise_type ),
           sets ( id, set_number, weight, reps, is_completed )
         )
       `)
@@ -219,7 +224,7 @@ router.get('/:id', async (req, res) => {
         routines ( id, name ),
         session_exercises (
           id, exercise_id, order_index,
-          exercises ( id, name, muscle_group, description ),
+          exercises ( id, name, muscle_group, description, exercise_type ),
           sets ( id, set_number, weight, reps, is_completed, completed_at )
         )
       `)
@@ -236,6 +241,20 @@ router.get('/:id', async (req, res) => {
             data.session_exercises.forEach(se => {
                 if (se.sets) se.sets.sort((a, b) => a.set_number - b.set_number);
             });
+        }
+
+        // If resuming a session originating from a routine, fetch the exercise rest times
+        if (data.routines?.id) {
+            const { data: routeExercises } = await supabase
+                .from('routine_exercises')
+                .select('exercise_id, rest_time_seconds')
+                .eq('routine_id', data.routines.id);
+
+            if (routeExercises) {
+                data._restTimeByExercise = Object.fromEntries(
+                    routeExercises.map(re => [re.exercise_id, re.rest_time_seconds || 90])
+                );
+            }
         }
 
         res.json(data);

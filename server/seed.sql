@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS exercises (
   muscle_group TEXT NOT NULL,
   description TEXT DEFAULT '',
   image_url TEXT,
+  exercise_type TEXT DEFAULT 'weighted' CHECK (exercise_type IN ('weighted', 'bodyweight', 'timed')),
   is_custom BOOLEAN DEFAULT false,
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now()

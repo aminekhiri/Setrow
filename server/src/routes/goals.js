@@ -10,15 +10,17 @@ router.get('/', async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('goals')
-            .select('*, exercises ( id, name, muscle_group )')
+            .select('*, exercises ( id, name, muscle_group, exercise_type )')
             .eq('user_id', req.userId)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // For each goal, get the user's best performance and compute 1RM progression
+        // For each goal, get the user's best performance and compute progression
         const goalsWithProgress = await Promise.all(
             data.map(async (goal) => {
+                const exerciseType = goal.exercises?.exercise_type || 'weighted';
+
                 const { data: bestSets } = await supabase
                     .from('sets')
                     .select(`
@@ -34,14 +36,10 @@ router.get('/', async (req, res) => {
                     .order('weight', { ascending: false })
                     .limit(50);
 
-                // Compute target 1RM
                 const targetWeight = goal.target_weight || 0;
                 const targetReps = goal.target_reps || 0;
-                const target1RM = targetWeight > 0
-                    ? calc1RM(targetWeight, targetReps)
-                    : 0;
 
-                // Find best 1RM from user's sets
+                // Find best values from user's sets
                 let best1RM = 0;
                 let currentBestWeight = 0;
                 let currentBestReps = 0;
@@ -51,18 +49,36 @@ router.get('/', async (req, res) => {
                         if (estimated > best1RM) {
                             best1RM = estimated;
                             currentBestWeight = s.weight;
+                        }
+                        if (s.reps > currentBestReps) {
                             currentBestReps = s.reps;
                         }
                     });
                 }
 
-                // Calculate progression percentage
+                // Calculate progression based on exercise type
                 let progress1RM = 0;
-                if (target1RM > 0) {
-                    progress1RM = Math.min(100, Math.round((best1RM / target1RM) * 100));
-                } else if (targetWeight > 0) {
-                    // Fallback: simple weight comparison
-                    progress1RM = Math.min(100, Math.round((currentBestWeight / targetWeight) * 100));
+                let target1RM = 0;
+
+                if (exerciseType === 'bodyweight' || exerciseType === 'timed') {
+                    // Bodyweight/timed: if target_weight is 0, compare reps (or seconds) directly
+                    if (targetWeight === 0 && targetReps > 0) {
+                        progress1RM = Math.min(100, Math.round((currentBestReps / targetReps) * 100));
+                    } else if (targetWeight > 0) {
+                        // Bodyweight with added weight (lest): use 1RM
+                        target1RM = calc1RM(targetWeight, targetReps);
+                        if (target1RM > 0) {
+                            progress1RM = Math.min(100, Math.round((best1RM / target1RM) * 100));
+                        }
+                    }
+                } else {
+                    // Weighted: use 1RM formula
+                    target1RM = targetWeight > 0 ? calc1RM(targetWeight, targetReps) : 0;
+                    if (target1RM > 0) {
+                        progress1RM = Math.min(100, Math.round((best1RM / target1RM) * 100));
+                    } else if (targetWeight > 0) {
+                        progress1RM = Math.min(100, Math.round((currentBestWeight / targetWeight) * 100));
+                    }
                 }
 
                 return {

@@ -118,7 +118,16 @@ router.get('/weight-history', async (req, res) => {
             .order('logged_at', { ascending: true });
 
         if (error) throw error;
-        res.json(data);
+
+        // Deduplicate: keep only the last entry per day
+        const byDay = {};
+        (data || []).forEach(entry => {
+            const dateKey = entry.logged_at.split('T')[0];
+            byDay[dateKey] = entry; // last one wins since sorted ascending
+        });
+        const deduped = Object.values(byDay);
+
+        res.json(deduped);
     } catch (err) {
         console.error('GET /profile/weight-history error:', err);
         res.status(500).json({ error: 'Erreur serveur' });

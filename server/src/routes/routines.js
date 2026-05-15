@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
             .select(`
         *,
         routine_exercises (
-          id, exercise_id, target_sets, target_reps, order_index,
+          id, exercise_id, target_sets, target_reps, order_index, rest_time_seconds,
           exercises ( id, name, muscle_group )
         )
       `)
@@ -33,7 +33,7 @@ router.get('/:id', async (req, res) => {
             .select(`
         *,
         routine_exercises (
-          id, exercise_id, target_sets, target_reps, order_index,
+          id, exercise_id, target_sets, target_reps, order_index, rest_time_seconds,
           exercises ( id, name, muscle_group, description, image_url )
         )
       `)
@@ -87,6 +87,7 @@ router.post('/', async (req, res) => {
                 exercise_id: ex.exercise_id,
                 target_sets: ex.target_sets || 4,
                 target_reps: ex.target_reps || 10,
+                rest_time_seconds: ex.rest_time_seconds || 90,
                 order_index: index,
             }));
 
@@ -103,7 +104,7 @@ router.post('/', async (req, res) => {
             .select(`
         *,
         routine_exercises (
-          id, exercise_id, target_sets, target_reps, order_index,
+          id, exercise_id, target_sets, target_reps, order_index, rest_time_seconds,
           exercises ( id, name, muscle_group )
         )
       `)
@@ -147,6 +148,7 @@ router.put('/:id', async (req, res) => {
                     exercise_id: ex.exercise_id,
                     target_sets: ex.target_sets || 4,
                     target_reps: ex.target_reps || 10,
+                    rest_time_seconds: ex.rest_time_seconds || 90,
                     order_index: index,
                 }));
 
@@ -160,7 +162,7 @@ router.put('/:id', async (req, res) => {
             .select(`
         *,
         routine_exercises (
-          id, exercise_id, target_sets, target_reps, order_index,
+          id, exercise_id, target_sets, target_reps, order_index, rest_time_seconds,
           exercises ( id, name, muscle_group )
         )
       `)

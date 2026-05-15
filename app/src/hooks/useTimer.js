@@ -1,7 +1,17 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useWorkoutStore } from '../store/workoutStore';
+
+// Configure Android Notification Channel for background delivery
+if (Platform.OS === 'android') {
+    Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+    });
+}
 
 // Configure notification handler so notifications show even in foreground
 Notifications.setNotificationHandler({
@@ -72,8 +82,8 @@ export const useTimer = () => {
             if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
                 // App came back to foreground — sync timer from stored end timestamp
                 syncRestTimer();
-                // Cancel notification since user is back in the app
-                cancelTimerNotification();
+                // Notifications are naturally cleared if opened. Do not forcefully cancel here
+                // because if the timer is still running, canceling it will lose the notification.
             }
             appStateRef.current = nextAppState;
         });
@@ -85,15 +95,12 @@ export const useTimer = () => {
             intervalRef.current = setInterval(() => {
                 tickRestTimer();
             }, 1000);
-        } else {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
                 intervalRef.current = null;
             }
-            // Timer just finished — cancel notification (we're in the app)
-            if (!isRestTimerActive) {
-                cancelTimerNotification();
-            }
+            // Do NOT cancel the notification naturally here. The OS will fire it natively.
+            // If we cancel it here, background execution racing could cancel it right before it fires.
         }
 
         return () => {

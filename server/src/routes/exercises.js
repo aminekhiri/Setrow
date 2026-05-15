@@ -69,7 +69,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/exercises — Créer un exercice custom
 router.post('/', async (req, res) => {
     try {
-        const { name, muscle_group, description, image_url } = req.body;
+        const { name, muscle_group, description, image_url, exercise_type } = req.body;
 
         if (!name || !muscle_group) {
             return res.status(400).json({ error: 'Nom et groupe musculaire requis' });
@@ -82,6 +82,7 @@ router.post('/', async (req, res) => {
                 muscle_group,
                 description: description || '',
                 image_url: image_url || null,
+                exercise_type: exercise_type || 'weighted',
                 is_custom: true,
                 created_by: req.userId,
             })

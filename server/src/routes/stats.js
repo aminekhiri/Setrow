@@ -11,6 +11,7 @@ router.get('/exercise/:id', async (req, res) => {
         switch (period) {
             case 'week': from.setDate(from.getDate() - 7); break;
             case 'month': from.setMonth(from.getMonth() - 1); break;
+            case '6months': from.setMonth(from.getMonth() - 6); break;
             case 'year': from.setFullYear(from.getFullYear() - 1); break;
             default: from.setMonth(from.getMonth() - 3); break;
         }
