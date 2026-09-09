@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ⚠️ Remplace par l'IP de ta machine (visible via `hostname -I`)
-const API_URL = 'http://192.168.50.110:3000/api';
+const API_URL = 'http://192.168.1.192:3000/api';
 
 let authToken = null;
 
