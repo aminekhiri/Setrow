@@ -16,7 +16,8 @@ if (Platform.OS === 'android') {
 // Configure notification handler so notifications show even in foreground
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
     }),
@@ -68,7 +69,6 @@ export const useTimer = () => {
         restTimeRemaining,
         isRestTimerActive,
         restTimerCurrentDuration,
-        restTimerEndAt,
         startRestTimer,
         tickRestTimer,
         stopRestTimer,
@@ -91,24 +91,19 @@ export const useTimer = () => {
     }, [syncRestTimer]);
 
     useEffect(() => {
-        if (isRestTimerActive && restTimeRemaining > 0) {
-            intervalRef.current = setInterval(() => {
-                tickRestTimer();
-            }, 1000);
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-            // Do NOT cancel the notification naturally here. The OS will fire it natively.
-            // If we cancel it here, background execution racing could cancel it right before it fires.
-        }
+        if (!isRestTimerActive) return undefined;
+
+        intervalRef.current = setInterval(() => {
+            tickRestTimer();
+        }, 1000);
 
         return () => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
+                intervalRef.current = null;
             }
         };
-    }, [isRestTimerActive, restTimeRemaining]);
+    }, [isRestTimerActive, tickRestTimer]);
 
     const formatTime = useCallback((seconds) => {
         const mins = Math.floor(seconds / 60);
